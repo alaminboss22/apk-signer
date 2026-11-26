@@ -1,18 +1,22 @@
 # VEX APK Signer
 
-An Android starter app for selecting an Android project ZIP and choosing an APK, AAB, or combined build output.
+An Android starter app and an initial cloud build API prototype for standard Android Studio Java/Kotlin Gradle projects.
 
 ## Current status
 
 - Android Studio Kotlin + Jetpack Compose starter UI is committed.
 - ZIP selection and output-format selection are implemented.
 - GitHub Actions builds a debug APK and uploads it as an artifact.
-- Cloud compilation, secure signing, build progress, and artifact downloads are **not implemented/deployed yet**. The app must not be treated as a working online APK/AAB signer until the backend is built and connected.
+- Initial authenticated Docker-worker API source is in `server/`.
+- The cloud API is **not deployed or connected to the Android app**.
+- The current worker compiles release APK/AAB artifacts but **does not sign them**. Secure keystore enrollment and a separate signing stage are still required.
+
+Do not treat the current Android app as a working online signer yet.
 
 ## Build
 
-Open this repository in Android Studio and run the `app` configuration, or use the Actions tab and run **Android CI**. Download the `VEX-APK-Signer-Debug-APK` artifact from a successful workflow run.
+Open this repository in Android Studio and run the `app` configuration, or use the Actions tab and download the `VEX-APK-Signer-Debug-APK` artifact from a successful workflow run.
 
-## Scope
+## Backend
 
-First target: standard Android Studio Java/Kotlin Gradle projects. See `server/README.md` for the planned cloud API and `SECURITY.md` for mandatory isolation and signing requirements.
+See `server/README.md` for prototype deployment steps and important security limitations. A dedicated Linux VPS with Docker and HTTPS is required; GitHub alone does not host this API.
