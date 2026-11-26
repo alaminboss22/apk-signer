@@ -1,0 +1,121 @@
+name: Build Android Project ZIP
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_zip_url:
+        description: "Direct HTTPS download URL for your Android project ZIP"
+        required: true
+        type: string
+      output_format:
+        description: "What to build"
+        required: true
+        type: choice
+        options:
+          - apk
+          - aab
+          - both
+        default: both
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zip-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Validate URL
+        env:
+          ZIP_URL: ${{ inputs.project_zip_url }}
+        run: |
+          python3 - <<'PY'
+          import os, urllib.parse
+          u = urllib.parse.urlparse(os.environ["ZIP_URL"])
+          if u.scheme != "https" or not u.hostname:
+              raise SystemExit("Only a valid HTTPS ZIP download URL is allowed.")
+          PY
+
+      - name: Download project ZIP
+        env:
+          ZIP_URL: ${{ inputs.project_zip_url }}
+        run: |
+          curl --fail --location --silent --show-error --max-time 300 --max-filesize 209715200 "$ZIP_URL" -o project.zip
+          test -s project.zip
+          python3 - <<'PY'
+          import zipfile
+          z = zipfile.ZipFile("project.zip")
+          infos = z.infolist()
+          if not infos or len(infos) > 10000:
+              raise SystemExit("ZIP has too many or no entries.")
+          total = 0
+          for i in infos:
+              n = i.filename.replace("\\", "/")
+              if n.startswith("/") or ".." in n.split("/"):
+                  raise SystemExit("Unsafe ZIP path detected.")
+              total += i.file_size
+              if total > 2 * 1024 * 1024 * 1024:
+                  raise SystemExit("Uncompressed ZIP is too large.")
+          if z.testzip() is not None:
+              raise SystemExit("ZIP integrity check failed.")
+          z.extractall("project")
+          PY
+
+      - name: Find Gradle project
+        id: project
+        run: |
+          mapfile -t wrappers < <(find project -maxdepth 5 -type f -name gradlew)
+          if [ "${#wrappers[@]}" -ne 1 ]; then
+            echo "ZIP must contain exactly one gradlew wrapper within five folders."
+            exit 1
+          fi
+          dir="$(dirname "${wrappers[0]}")"
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          chmod +x "${wrappers[0]}"
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+
+      - name: Build release APK/AAB
+        working-directory: ${{ steps.project.outputs.dir }}
+        env:
+          OUTPUT_FORMAT: ${{ inputs.output_format }}
+        run: |
+          tasks=()
+          if [ "$OUTPUT_FORMAT" = "apk" ] || [ "$OUTPUT_FORMAT" = "both" ]; then
+            tasks+=(assembleRelease)
+          fi
+          if [ "$OUTPUT_FORMAT" = "aab" ] || [ "$OUTPUT_FORMAT" = "both" ]; then
+            tasks+=(bundleRelease)
+          fi
+          ./gradlew --no-daemon "${tasks[@]}"
+
+      - name: Collect outputs
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/VEX-OUTPUT"
+          find . -type f \( -path "*/build/outputs/apk/release/*.apk" -o -path "*/build/outputs/bundle/release/*.aab" \) -exec cp {} "$GITHUB_WORKSPACE/VEX-OUTPUT/" \;
+          test -n "$(find "$GITHUB_WORKSPACE/VEX-OUTPUT" -type f -print -quit)"
+
+      - name: Upload APK/AAB artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: VEX-Android-Project-Outputs
+          path: VEX-OUTPUT/*
+          if-no-files-found: error
+          retention-days: 3
