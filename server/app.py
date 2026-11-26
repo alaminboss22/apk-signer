@@ -55,7 +55,8 @@ def run_build(job_id, source, output, fmt):
             },
             mem_limit="4g", nano_cpus=2_000_000_000, pids_limit=256,
             cap_drop=["ALL"], security_opt=["no-new-privileges:true"],
-            read_only=True, tmpfs={"/tmp": "rw,noexec,nosuid,size=3g"},
+            read_only=True, tmpfs={"/tmp": "rw,nosuid,nodev,size=3g"},
+            environment={"GRADLE_USER_HOME": "/tmp/gradle", "ANDROID_USER_HOME": "/tmp/android"},
             auto_remove=False
         )
         result = container.wait(timeout=1600)
