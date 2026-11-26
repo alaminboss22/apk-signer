@@ -1,0 +1,16 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      VEX_API_TOKEN: ${VEX_API_TOKEN:?Set VEX_API_TOKEN in the environment}
+      VEX_WORKER_IMAGE: vex-apk-worker:latest
+      MAX_CONCURRENT_BUILDS: "1"
+      JOB_ROOT: /var/lib/vex/jobs
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - vex_jobs:/var/lib/vex/jobs
+    restart: unless-stopped
+volumes:
+  vex_jobs:
